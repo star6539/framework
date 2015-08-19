@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012, 2014 IBM Corporation and others.
+ * Copyright (c) 2012, 2015 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -16,9 +16,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import org.eclipse.osgi.container.Module.StartOptions;
-import org.eclipse.osgi.container.Module.State;
-import org.eclipse.osgi.container.Module.StopOptions;
+import org.eclipse.osgi.container.Module.*;
 import org.eclipse.osgi.container.ModuleContainerAdaptor.ContainerEvent;
 import org.eclipse.osgi.container.ModuleContainerAdaptor.ModuleEvent;
 import org.eclipse.osgi.container.ModuleDatabase.Sort;
@@ -1389,6 +1387,7 @@ public final class ModuleContainer implements DebugOptionsListener {
 		private EventManager startLevelThread = null;
 		private final Object frameworkStartLevelLock = new Object();
 		private boolean debugStartLevel = false;
+
 		{
 			setDebugOptions();
 		}

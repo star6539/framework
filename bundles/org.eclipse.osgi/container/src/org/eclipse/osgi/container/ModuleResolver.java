@@ -12,6 +12,7 @@ package org.eclipse.osgi.container;
 
 import java.security.Permission;
 import java.util.*;
+import java.util.concurrent.*;
 import org.apache.felix.resolver.*;
 import org.eclipse.osgi.container.ModuleRequirement.DynamicModuleRequirement;
 import org.eclipse.osgi.container.namespaces.EquinoxFragmentNamespace;
@@ -55,7 +56,7 @@ final class ModuleResolver {
 	boolean DEBUG_WIRING = false;
 	boolean DEBUG_REPORT = false;
 
-	private final int DEFAULT_BATCH_SIZE = 1;
+	private final int DEFAULT_BATCH_SIZE = Integer.MAX_VALUE;
 	final int resolverRevisionBatchSize;
 
 	void setDebugOptions() {
@@ -77,14 +78,27 @@ final class ModuleResolver {
 
 	final ThreadLocal<Boolean> threadResolving = new ThreadLocal<Boolean>();
 	final ModuleContainerAdaptor adaptor;
+	final ExecutorService executor;
 
 	/**
 	 * Constructs the module resolver with the specified resolver hook factory
 	 * and resolver.
 	 * @param adaptor the container adaptor
 	 */
-	ModuleResolver(ModuleContainerAdaptor adaptor) {
+	ModuleResolver(final ModuleContainerAdaptor adaptor) {
 		this.adaptor = adaptor;
+		this.executor = new ThreadPoolExecutor( // construct the executor ourselves
+				0, // core size
+				4, // max size
+				5, // idle timeout
+				TimeUnit.SECONDS, // unit for timeout 
+				new LinkedBlockingQueue<Runnable>(), // use 'unlimited' queue
+				new ThreadFactory() { // try to name the threads with useful name
+					@Override
+					public Thread newThread(Runnable r) {
+						return new Thread(r, "Equinox resolver thread - " + adaptor.toString()); //$NON-NLS-1$
+					}
+				});
 		setDebugOptions();
 		String batchSizeConfig = this.adaptor.getProperty(EquinoxConfiguration.PROP_RESOLVER_REVISION_BATCH_SIZE);
 		int tempBatchSize;
@@ -470,11 +484,11 @@ final class ModuleResolver {
 			}
 
 			@Override
-			public void logUsesConstraintViolation(Resource resource, ResolutionException error) {
+			public void logUsesConstraintViolation(Resource resource, ResolutionError error) {
 				if (errors == null) {
 					errors = new HashMap<Resource, ResolutionException>();
 				}
-				errors.put(resource, error);
+				errors.put(resource, error.toException());
 				if (DEBUG_USES) {
 					Debug.println(new StringBuilder("RESOLVER: Uses constraint violation") //$NON-NLS-1$
 							.append(SEPARATOR).append(TAB) //
@@ -986,7 +1000,7 @@ final class ModuleResolver {
 			Map<Resource, List<Wire>> interimResults = null;
 			try {
 				transitivelyResolveFailures.addAll(revisions);
-				interimResults = new ResolverImpl(logger).resolve(this);
+				interimResults = new ResolverImpl(logger, executor).resolve(this);
 				applyInterimResultToWiringCopy(interimResults);
 				if (DEBUG_ROOTS) {
 					Debug.println("Resolver: resolved " + interimResults.size() + " bundles."); //$NON-NLS-1$ //$NON-NLS-2$
@@ -1181,7 +1195,7 @@ final class ModuleResolver {
 
 		private Map<Resource, List<Wire>> resolveDynamic() throws ResolutionException {
 			List<Capability> dynamicMatches = findProviders0(dynamicReq.getOriginal(), dynamicReq);
-			return new ResolverImpl(new Logger(0)).resolve(this, dynamicReq.getRevision(), dynamicReq.getOriginal(), dynamicMatches);
+			return new ResolverImpl(new Logger(0), null).resolve(this, dynamicReq.getRevision(), dynamicReq.getOriginal(), dynamicMatches);
 		}
 
 		private void filterResolvable() {
